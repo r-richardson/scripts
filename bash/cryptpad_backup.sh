@@ -31,9 +31,9 @@ backup_archive_name="cryptpad_backup_${start_datetime}.tar.gz"
 backups_log_name='.cryptpad_backup.log'
 
 # CRYPTPAD HOST SETTINGS:
-ssh_username=$(id -u -n)                        # <- change if needed
-cryptpad_ip='x.x.x.x'                           # <- CHANGE THIS
-cryptpad_path="/path/to/cryptpad/installation"  # <- CHANGE THIS
+ssh_username=$(id -u -n)                        # <- change if client username differs from host
+cryptpad_ip='x.x.x.x'                           # <- CHANGE THIS OR PROVIDE -i ARGUMENT
+cryptpad_path="/path/to/cryptpad/installation"  # <- CHANGE THIS OR PROVIDE -c ARGUMENT
 
 while getopts i:c:b: flag # get input parameters
 do
@@ -61,6 +61,7 @@ logs_path="${cryptpad_path}/data/logs"
 customize_path="${cryptpad_path}/customize"
 systemd_service="/etc/systemd/system/cryptpad.service"
 nginx_config="/etc/nginx/conf.d/cryptpad.conf"
+dhparam_path="/etc/nginx/dhparam.pem"
 
 #────────────────────
 # SCRIPT:
@@ -107,7 +108,7 @@ function backup {
   file_path=$1
   parent_dir=${file_path%/*}
   mkdir -p $temp_backup_dir./$parent_dir
-  scp -rpq ${ssh_username}@${cryptpad_ip}:$file_path ${temp_backup_dir}./$file_path
+  scp -rpq -P 80 ${ssh_username}@${cryptpad_ip}:$file_path ${temp_backup_dir}./$file_path
   ret=$?
   checkSuccess $ret "fetched" "couldn't fetch" $file_path
 }
@@ -122,6 +123,7 @@ backup $cryptpad_config
 backup $datastore_path
 backup $block_path
 backup $blob_path
+backup $blobstage_path
 backup $archive_path
 backup $pins_path
 backup $tasks_path
@@ -130,6 +132,7 @@ backup $logs_path
 backup $customize_path
 backup $systemd_service
 backup $nginx_config
+backup $dhparam_path
 
 #───────────────────────────
 # COMPRESSION:
@@ -141,7 +144,7 @@ if $something_worked; then
   tar -czf ${backups_dir}/${backup_archive_name} .
   tar_health=$?
   cd - > /dev/null
-  checkSuccess $ret "created archive" "compression FAILURE" "\${backups_dir}/${backup_archive_name}"
+  checkSuccess $ret "created archive" "compression FAILURE" "${backups_dir}/${backup_archive_name}"
 
   if [ $tar_health -eq 0 ]; then
     rm -rf $temp_backup_dir
@@ -151,7 +154,7 @@ if $something_worked; then
 fi
 
 echo $table_seperator
-echo "│ $(date +%F) │ $(date +%H-%M-%S) │ log saved to: \${backups_path}/${backups_log_name}"
+echo "│ $(date +%F) │ $(date +%H-%M-%S) │ log saved to: ${backups_dir}/${backups_log_name}"
 echo $table_bottom2
 
 if [ $backup_health -eq 0 ] && [ $tar_health -eq 0 ]; then
@@ -162,4 +165,3 @@ else
     echo "$(date +%F)/$(date +%H-%M-%S): CRYPTPAD BACKUP FAILURE!" >> $backup_log_full_path
 fi
 echo $table_bottom
-
