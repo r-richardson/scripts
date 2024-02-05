@@ -36,10 +36,10 @@ print_help() {
 backup() {
   file_path=$(migrate_path "$1")
   parent_dir=${file_path%/*}
-  mkdir -p $temp_backup_dir./$parent_dir
-  scp -rpq -P ${ssh_port} ${ssh_username}@${cryptpad_ip}:$file_path ${temp_backup_dir}./$file_path
-  ret=$?
-  check_success $ret "fetched" "couldn't fetch" $file_path
+
+  mkdir -p $temp_backup_dir$parent_dir
+  scp -rpq -P ${ssh_port} ${ssh_username}@${cryptpad_ip}:$file_path $temp_backup_dir$file_path
+  ret=$? && check_success $ret "fetched" "couldn't fetch" $file_path
 }
 
 check_success() {
@@ -58,7 +58,7 @@ migrate_path() {
   local value=$1
   value=${value%/}
   if [[ "$value" != /* ]]; then # if path is relative,
-      value="${cryptpad_path}/${value}" # make absolute
+      value="${cryptpad_path}/data/${value}" # make absolute
   fi
   echo "$value"
 }
@@ -141,18 +141,18 @@ echo "$(date +%F)/$(date +%H-%M-%S): $start_msg" >> $backup_log_full_path
 echo ${table[1]}
 
 cryptpad_config="${cryptpad_path}/config/config.js"
-temp_backup_dir="${backup_dir}/${start_datetime}/"
+temp_backup_dir="${backup_dir}/${start_datetime}"
 no_failures=1
 backup $cryptpad_config
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "filePath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "blockPath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "blobPath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "blobStagingPath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "archivePath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "pinPath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "taskPath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "decreePath")
-backup $(get_filepath_from_config "$temp_backup_dir./$cryptpad_config" "logPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "filePath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blockPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobStagingPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "archivePath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "pinPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "taskPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "decreePath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "logPath")
 for path in "${paths[@]}"; do
     backup "$path"
 done
@@ -164,8 +164,8 @@ if [ "$no_failures" -eq 1 ]; then
   echo "$(date +%F)/$(date +%H-%M-%S): compressing files" >> $backup_log_full_path
   cd $temp_backup_dir > /dev/null &&
   tar -czf ${backup_dir}/${archive_name} .
-  cd - > /dev/null
-  check_success $ret "created archive" "compression FAILURE" "${backup_dir}/${archive_name}" &&
+  ret=$? && check_success $ret "created archive" "compression FAILURE" "${backup_dir}/${archive_name}" &&
+  cd - > /dev/null &&
   rm -rf $temp_backup_dir
 else
   compr_skip_msg="skipping compression due to previous errors!"
