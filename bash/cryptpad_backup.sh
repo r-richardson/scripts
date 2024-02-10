@@ -58,7 +58,7 @@ migrate_path() {
   local value=$1
   value=${value%/}
   if [[ "$value" != /* ]]; then # if path is relative,
-      value="${cryptpad_path}/data/${value}" # make absolute
+      value="${cryptpad_path}/${value}" # make absolute
   fi
   echo "$value"
 }
@@ -145,12 +145,12 @@ temp_backup_dir="${backup_dir}/${start_datetime}"
 no_failures=1
 backup $cryptpad_config
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "filePath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blockPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobStagingPath")
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "archivePath")
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "pinPath")
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "taskPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blockPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobPath")
+backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobStagingPath")
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "decreePath")
 backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "logPath")
 for path in "${paths[@]}"; do
