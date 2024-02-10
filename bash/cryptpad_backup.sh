@@ -68,8 +68,38 @@ get_filepath_from_config() {
     local var_name="$2"
     # extract value
     local path=$(grep "$var_name" "$config" | sed -n 's/^.*: *'\''\(.*\)'\'' *,/\1/p' | tr -d "'")
-    path=$(migrate_path "$path")
+    # Replace "/./" with "/"
+    path=$(echo "$path" | sed 's|^./||')
     echo "$path"
+}
+
+debug_log() {
+    if [ "$debug" = true ]; then
+        local prefix=""
+        local variables=()
+
+        # Determine behavior based on argument count
+        if [ $# -eq 0 ] || [ $# -eq 1 ]; then
+            # No parameters or one parameter: log all relevant variables
+            variables=("cryptpad_ip" "cryptpad_path" "backup_dir" "ssh_username" "ssh_port")
+            prefix="$1"
+        else
+            # Two or more parameters: use the first as prefix, rest as specific variables
+            prefix="$1"
+            shift 
+            variables=("$@")
+        fi
+
+        for var in "${variables[@]}"; do
+            if [ -n "${prefix}" ]; then
+                echo "${prefix}: ${var}=${!var}"
+                echo "${prefix}: ${var}=${!var}" >> $backup_log_full_path
+            else
+                echo "${var}=${!var}"
+                echo "${var}=${!var}" >> $backup_log_full_path
+            fi
+        done
+    fi
 }
 
 handle_signal() {
@@ -81,7 +111,6 @@ trap handle_signal SIGINT
 config_locations=(
     "/home/$(id -u -n)/.config/cryptpad_backup/cryptpad_backup.conf"
     "$(pwd)/cryptpad_backup.conf"
-    # Add additional locations here if needed in the future
 )
 
 # Check and load variables from cryptpad_backup.conf
@@ -106,7 +135,6 @@ while getopts "i:c:b:p:u:" opt; do
     esac
 done
 
-# Check if all mandatory variables are set
 mandatory_vars=("cryptpad_ip")
 missing_vars=()
 for var in "${mandatory_vars[@]}"; do
@@ -115,6 +143,8 @@ for var in "${mandatory_vars[@]}"; do
     fi
 done
 
+debug=true
+
 version=1.1; TZ='Europe/Berlin'; start_datetime=$(date +%F_%H-%M-%S)
 SUCCESS_COLOR='\033[0;32m'; FAILURE_COLOR='\033[0;31m'; NO_COLOR='\033[0m'
 [ -z ${cryptpad_ip} ] &&
@@ -122,7 +152,7 @@ echo "$cryptpad_ip" &&
 echo -e "${FAILURE_COLOR}NO CRYPTPAD IP PROVIDED${NO_COLOR}" && print_help && exit 0;
 
 [ -z ${cryptpad_path} ] && cryptpad_path="/home/$(id -u -n)/cryptpad"
-[ -z ${backup_dir} ] && backup_dir="/home/$(id -u -n)/.Backup/cryptpad"
+[ -z ${backup_dir} ] && backup_dir="/home/$(id -u -n)/Backup/cryptpad"
 [ -z ${ssh_username} ] && ssh_username=$(id -u -n)
 [ -z ${ssh_port} ] && ssh_port=22
 [ -z ${archive_name} ] && archive_name="cryptpad_backup_${start_datetime}.tar.gz"
@@ -143,18 +173,21 @@ echo ${table[1]}
 cryptpad_config="${cryptpad_path}/config/config.js"
 temp_backup_dir="${backup_dir}/${start_datetime}"
 no_failures=1
-backup $cryptpad_config
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "filePath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "archivePath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "pinPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "taskPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blockPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "blobStagingPath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "decreePath")
-backup $(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "logPath")
-for path in "${paths[@]}"; do
-    backup "$path"
+declare -a cryptpad_config_keys=("filePath" "archivePath" "pinPath" "taskPath" "blockPath" "blobPath" "blobStagingPath" "decreePath" "logPath")
+
+backup "$cryptpad_config"
+
+# Iterate over the array of cryptpads config "Database" keys
+for key in "${cryptpad_config_keys[@]}"; do
+    backup_path=$(get_filepath_from_config "$temp_backup_dir$cryptpad_config" "$key")
+    
+    if [[ "$backup_path" != "" && "$backup_path" != "false" && "$backup_path" != "False" ]]; then
+        backup "$backup_path"
+    fi
+done
+
+for backup_custom_path in "${custom_paths[@]}"; do # sourced from backup config
+    backup "$backup_custom_path"
 done
 #───────────────────────────
 # COMPRESSION:
@@ -178,10 +211,10 @@ echo "│ $(date +%F) │ $(date +%H-%M-%S) │ log saved to: ${backup_dir}/${lo
 echo ${table[3]}
 
 if [ "$no_failures" -eq 1 ]; then
-    echo -e "│ $(date +%F) │ $(date +%H-%M-%S) │ ${SUCCESS_COLOR} BACKUP SUCCESSFUL ${NO_COLOR} │"
+    echo -e "│ $(date +%F) │ $(date +%H-%M-%S) │     ${SUCCESS_COLOR} BACKUP SUCCESSFUL ${NO_COLOR}     │"
     echo "$(date +%F)/$(date +%H-%M-%S): CRYPTPAD BACKUP SUCCESSFUL" >> $backup_log_full_path
 else
-    echo -e "│ $(date +%F) │ $(date +%H-%M-%S) │ ${FAILURE_COLOR} BACKUP FAILURE!  ${NO_COLOR} │"
+    echo -e "│ $(date +%F) │ $(date +%H-%M-%S) │      ${FAILURE_COLOR} BACKUP FAILURE! ${NO_COLOR}      │"
     echo "$(date +%F)/$(date +%H-%M-%S): CRYPTPAD BACKUP FAILURE!" >> $backup_log_full_path
 fi
 echo ${table[4]}
